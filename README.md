@@ -131,14 +131,14 @@ rlang::eval_tidy(cyl_larger_4)
 cyl_larger_4_b <- rlang::quo("cyl" > 4)
 cyl_larger_4_b
 # this selects all filtered data
-mtcars[rlang::eval_tidy(cyl_larger_4_b),]
+mtcars[rlang::eval_tidy(cyl_larger_4_b),] # *** I get also cars with cyl == 4 in the results???
 ```
 
 Ultimately, we like to build functions around our calls so let's work our way towards a first working example.
 
 ```{r}
 # select one variable
-temp_fn <- function(x, var){
+temp_fn <- function(x, var) {
   print(rlang::enquo(var))
   var_new <- rlang::enquo(var) 
   x %>% 
@@ -147,7 +147,7 @@ temp_fn <- function(x, var){
 temp_fn(mtcars, cyl)
 
 # filter one variable
-temp_fn <- function(x, condition){
+temp_fn <- function(x, condition) {
   condition_quoted <- rlang::enquo(condition)
   x %>% 
     dplyr::filter(., rlang::eval_tidy(rlang::UQ(condition_quoted)))
@@ -155,7 +155,7 @@ temp_fn <- function(x, condition){
 temp_fn(mtcars, (cyl > 4))
 
 # transmutate one variable
-temp_fn <- function(x, condition){
+temp_fn <- function(x, condition) {
   condition_quoted <- rlang::enquo(condition)
   x %>% 
     dplyr::transmute(., test = rlang::eval_tidy(rlang::UQ(condition_quoted)))
@@ -163,7 +163,7 @@ temp_fn <- function(x, condition){
 temp_fn(mtcars, (cyl > 4))
 
 # transmute one variable and change output name
-temp_fn <- function(x, condition, condition_name){
+temp_fn <- function(x, condition, condition_name) {
   condition_quoted <- rlang::enquo(condition)
   x %>% 
     dplyr::transmute(., rlang::UQ(condition_name) :=
@@ -225,3 +225,40 @@ mtcars %>%
             mpg_smaller_mean_mpg = sum(mpg_smaller_mean_mpg, na.rm = TRUE))
 ```
 
+## Working with data.table
+
+The package `data.table` is a package for aggregation of large data sets. It has a concise
+and consistent syntax and compared to the `data.frame` object in base R, it is very fast.
+The general form is `DT[i, j , by]`: take `DT`, subset rows using `i`, then calculate `j`,
+grouped by `by`.
+[CRAN: data.table](https://cran.r-project.org/web/packages/data.table/index.html)
+
+The example below illustrates how data quality checks can be done using `data.table`. 
+```{r}
+dt <- data.table::as.data.table(airquality)
+head(dt)
+
+# get count and average temperature of all days when Ozone is NA, per month
+dt[is.na(Ozone),
+   .(mean_Temp = mean(Temp), .N),
+   by=Month]
+
+# Is solar radiation above average and temperature below average? (no match)
+dt[(Solar.R > mean(Solar.R)) & (Temp < mean(Temp)),
+   .N,
+   by=.(Day, Month)]
+
+# temperature below 40° F during summer? (no match)
+dt[(Temp <= 40) & (Month %in% c(6, 7, 8, 9)),
+   .(min_Temp = min(Temp)),
+   by=.(Day, Month)]
+```
+
+The example above shows that the filter `i` can be very flexible by using
+functions such as `is.na` or statistical functions such as `mean`, `std`,
+`quantile` etc.
+
+Based on a configuration table, the statement `dt[i, j, by]` could be generated
+and executed automatically. Note: if the filter is given as a string `filter`,
+the following command does not work: `dt[filter,]` but one needs to use `eval`
+and `parse`. Or maybe `erlang`?
